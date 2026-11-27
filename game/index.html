@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RIDGE RUN — a valley flight game</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1420; font-family: "Segoe UI", Arial, sans-serif; }
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #frame { position: relative; width: min(100vw, calc(100vh * 1280 / 720)); height: min(100vh, calc(100vw * 720 / 1280)); }
+  #game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .hidden { display: none !important; }
+  /* ---------- HUD ---------- */
+  #hud { position: absolute; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.85); z-index: 5; }
+  #topbar { position: absolute; top: 0; left: 0; right: 0; height: 64px; display: flex; align-items: flex-start; justify-content: space-between; padding: 12px 16px 0; box-sizing: border-box; }
+  #topleft { font-weight: 800; font-size: 20px; letter-spacing: 1px; line-height: 1.5; }
+  #rings { color: #ffb020; }
+  #score { color: #7dffb0; }
+  #time { color: #fff; }
+  #lives { font-size: 16px; color: #ff8a8a; margin-top: 2px; }
+  #compasswrap { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); }
+  #compass { width: 360px; height: 56px; display: block; border-radius: 4px; }
+  #minimapwrap { position: absolute; top: 76px; right: 16px; width: 200px; height: 200px; border: 2px solid rgba(255,255,255,.65); border-radius: 4px; overflow: hidden; background: #16241a; box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+  #minimap { width: 100%; height: 100%; display: block; }
+  #panel { position: absolute; left: 0; right: 0; bottom: 0; height: 110px; }
+  #gauges { width: 100%; height: 100%; display: block; }
+  #toast { position: absolute; left: 50%; top: 300px; transform: translateX(-50%); font-size: 30px; font-weight: 800; color: #ffd34d; text-align: center; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  #stallwarn { position: absolute; left: 50%; top: 180px; transform: translateX(-50%); font-size: 34px; font-weight: 800; color: #ff3b3b; letter-spacing: 4px; opacity: 0; }
+  #stallwarn.on { opacity: 1; animation: blink .4s infinite alternate; }
+  #gearwarn { position: absolute; left: 50%; top: 230px; transform: translateX(-50%); font-size: 22px; font-weight: 800; color: #ff9a3d; opacity: 0; }
+  @keyframes blink { from { opacity: .35; } to { opacity: 1; } }
+  #controls { position: absolute; left: 16px; bottom: 122px; font-size: 13px; line-height: 1.7; opacity: .92; background: rgba(0,0,0,.4); padding: 8px 12px; border-radius: 6px; }
+  /* ---------- Screens ---------- */
+  .screen { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #fff; background: linear-gradient(180deg, rgba(6,16,32,.66), rgba(10,26,12,.78)); }
+  .screen h1 { font-size: 72px; margin: 0; letter-spacing: 8px; background: linear-gradient(180deg,#eaf6ff,#7fb4dd 55%,#ffb020); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: 0 4px 0 rgba(20,40,60,.55), 0 8px 24px rgba(0,0,0,.7); }
+  .screen h2 { font-size: 19px; margin: 8px 0 0; letter-spacing: 5px; color: #ffd34d; font-weight: 600; }
+  .screen p { max-width: 660px; font-size: 16px; line-height: 1.7; margin: 18px 0 0; }
+  .screen .keys { font-size: 14px; line-height: 2; margin-top: 18px; background: rgba(0,0,0,.45); padding: 12px 22px; border-radius: 8px; }
+  .bigbtn { pointer-events: auto; cursor: pointer; margin-top: 26px; font-size: 22px; font-weight: 800; letter-spacing: 2px; color: #1a1206; background: #ffb020; border: none; border-radius: 8px; padding: 14px 44px; box-shadow: 0 4px 0 #8a5a10; }
+  .bigbtn:hover { background: #ffc44d; }
+  .bigbtn.secondary { background: #6fd8ff; box-shadow: 0 4px 0 #2a6ea6; margin-left: 12px; }
+  #endscreen h1, #crashscreen h1 { font-size: 52px; }
+  #pausescreen { background: rgba(5,10,22,.72); }
+  #pausescreen h1 { font-size: 44px; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="frame">
+<canvas id="game" width="1280" height="720" aria-label="RIDGE RUN: a valley flight game"></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud" class="hidden">
+  <div id="topbar">
+    <div id="topleft">
+      <div><span id="rings">RINGS 0 / 8</span> &nbsp; <span id="score">SCORE 0</span> &nbsp; <span id="time">0:00</span></div>
+      <div id="lives">✈ ●●●</div>
+    </div>
+    <div id="compasswrap"><canvas id="compass" width="360" height="56"></canvas></div>
+    <div style="width: 200px"></div>
+  </div>
+  <div id="minimapwrap"><canvas id="minimap" width="200" height="200"></canvas></div>
+  <div id="panel"><canvas id="gauges" width="1280" height="110"></canvas></div>
+  <div id="controls">W / ↑ climb &nbsp;•&nbsp; S / ↓ descend &nbsp;•&nbsp; A D / ← → bank<br>SHIFT throttle up &nbsp;•&nbsp; CTRL throttle down &nbsp;•&nbsp; F flaps &nbsp;•&nbsp; G gear<br>C camera &nbsp;•&nbsp; R reset &nbsp;•&nbsp; P pause &nbsp;•&nbsp; M mute</div>
+  <div id="toast"></div>
+  <div id="stallwarn">⚠ STALL ⚠</div>
+  <div id="gearwarn">GEAR UP — LOWER IT TO LAND</div>
+</div>
+
+<div id="titlescreen" class="screen">
+  <h1>RIDGE RUN</h1>
+  <h2>A BUSH-PLANE RUN DOWN THE VALLEY &nbsp;•&nbsp; PINEFIELD TO LAKESIDE</h2>
+  <p>You are ferrying the old mail plane down the valley. Take off from
+  Pinefield, thread all eight glowing rings, and put her down gently on the
+  Lakeside runway. Mind your speed — too slow and she stalls, too fast or
+  too hard and the runway will not forgive you. The river, the fields and
+  the mountains are all yours to fly over.</p>
+  <div class="keys">W / ↑ — climb &nbsp;&nbsp; S / ↓ — descend &nbsp;&nbsp; A D / ← → — bank and turn<br>
+  SHIFT — throttle up &nbsp;&nbsp; CTRL — throttle down &nbsp;&nbsp; F — flaps &nbsp;&nbsp; G — gear<br>
+  C — cockpit / chase camera &nbsp;&nbsp; R — reset &nbsp;&nbsp; P — pause &nbsp;&nbsp; M — mute</div>
+  <div><button id="startbtn" class="bigbtn">TAKE OFF</button></div>
+  <p style="font-size:13px;opacity:.75">Three lives. Rings are worth 100 each; a smooth, centred landing pays up to 500.</p>
+</div>
+
+<div id="pausescreen" class="screen hidden">
+  <h1>PAUSED</h1>
+  <p>The valley waits. Your flight is exactly where you left it.</p>
+  <div><button id="resumebtn" class="bigbtn">RESUME</button>
+  <button id="restartbtn" class="bigbtn secondary">RESTART RUN</button></div>
+</div>
+
+<div id="crashscreen" class="screen hidden">
+  <h1>CRASHED</h1>
+  <p id="crashreason"></p>
+  <div><button id="retrybtn" class="bigbtn">BACK IN THE AIR</button></div>
+</div>
+
+<div id="endscreen" class="screen hidden">
+  <h1 id="endtitle">LANDED AT LAKESIDE</h1>
+  <p id="endtext"></p>
+  <div><button id="againbtn" class="bigbtn">FLY AGAIN</button></div>
+</div>
+
+</div></div>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
